@@ -26,8 +26,8 @@ Everything you need to stand up both MCP servers on a new machine.
 
 | Project | Path | Repo |
 |---------|------|------|
-| Research MCP | `/home/user/projects/host/local-web-mcp` | `github.com/JayDataEngineer/local-web-mcp` |
-| Media Analysis MCP | `/home/user/projects/host/media-analysis-mcp` | `github.com/JayDataEngineer/media-analysis-mcp` |
+| Research MCP | `~/Documents/mcp/research-mcp` | `github.com/JayDataEngineer/research-mcp` (private) |
+| Media Analysis MCP | `~/Documents/mcp/media-mcp` | `github.com/JayDataEngineer/media-mcp` (private) |
 
 ## Research MCP Server
 
@@ -49,7 +49,8 @@ Everything you need to stand up both MCP servers on a new machine.
 
 ### Deployment
 ```bash
-cd /home/user/projects/host/local-web-mcp
+cd ~/Documents/mcp/research-mcp
+cp .env.example .env       # then edit .env to set POSTGRES_PASSWORD (+ optional MCP_PROXY_URL)
 docker compose up -d --build
 ```
 
@@ -108,8 +109,11 @@ Models spin down after 30 min idle, re-load on next request.
 
 ### Deployment
 ```bash
-cd /home/user/projects/host/media-analysis-mcp
+cd ~/Documents/mcp/media-mcp
 docker compose up -d --build
+
+# GPU mode (NVIDIA):
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
 ### Key Files

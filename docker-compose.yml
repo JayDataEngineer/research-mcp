@@ -1,0 +1,156 @@
+# Research MCP — web research, scraping, structured extraction, Florence-2 vision.
+#
+# Stack: postgres (domain tracking) + redis (cache + Celery broker)
+#        + searxng (meta search) + mcp-server + celery worker/beat + flower.
+#
+# Bring up:
+#   cp .env.example .env  &&  $EDITOR .env       # set POSTGRES_PASSWORD
+#   docker compose up -d --build
+#
+# Expose over Tailscale (host-side, not part of compose):
+#   tailscale funnel --bg --https=443 http://127.0.0.1:8327
+# Client URL:  https://<node>.ts.net/mcp  (or http://<node>:8327/mcp on tailnet)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mcp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mcp_server}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [mcp-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mcp-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks: [mcp-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: mcp-searxng
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080
+    networks: [mcp-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || wget -qO- http://localhost:8080/ >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mcp-server:
+    build: .
+    image: research-mcp:latest
+    container_name: mcp-server
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8327:8000"   # host 8327 → container 8000 (matches existing tailscale funnel)
+    networks: [mcp-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      searxng:  { condition: service_started }
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
+      MCP_REDIS_HOST: redis
+      MCP_REDIS_PORT: 6379
+      MCP_POSTGRES_HOST: postgres
+      MCP_POSTGRES_PORT: 5432
+      MCP_POSTGRES_DB: ${POSTGRES_DB:-mcp_server}
+      MCP_POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      MCP_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MCP_SEARXNG_URL: http://searxng:8080
+      # Celery / SearXNG envs are read unprefixed by the task layer:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      SEARXNG_URL: http://searxng:8080
+      # Optional VPN proxy for outbound scraping (ProtonVPN SOCKS5, gluetun, etc.):
+      MCP_PROXY_URL: ${MCP_PROXY_URL:-}
+      MCP_PROXY_URLS: ${MCP_PROXY_URLS:-}
+      MCP_PROXY_ROTATION: ${MCP_PROXY_ROTATION:-round-robin}
+    volumes:
+      # Persist Florence-2 weights across rebuilds (transformers default cache location).
+      - hf-cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  celery-worker:
+    image: research-mcp:latest
+    container_name: mcp-celery-worker
+    init: true
+    restart: unless-stopped
+    networks: [mcp-net]
+    depends_on:
+      redis:    { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    command: ["celery", "-A", "src.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MCP_REDIS_HOST: redis
+      MCP_REDIS_PORT: 6379
+      MCP_POSTGRES_HOST: postgres
+      MCP_POSTGRES_PORT: 5432
+      MCP_POSTGRES_DB: ${POSTGRES_DB:-mcp_server}
+      MCP_POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      MCP_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MCP_SEARXNG_URL: http://searxng:8080
+      SEARXNG_URL: http://searxng:8080
+      MCP_PROXY_URL: ${MCP_PROXY_URL:-}
+      MCP_PROXY_URLS: ${MCP_PROXY_URLS:-}
+
+  celery-beat:
+    image: research-mcp:latest
+    container_name: mcp-celery-beat
+    init: true
+    restart: unless-stopped
+    networks: [mcp-net]
+    depends_on:
+      redis: { condition: service_healthy }
+    command: ["celery", "-A", "src.celery_app", "beat", "--loglevel=info"]
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MCP_REDIS_HOST: redis
+      MCP_REDIS_PORT: 6379
+
+  flower:
+    image: mher/flower:latest
+    container_name: mcp-flower
+    restart: unless-stopped
+    networks: [mcp-net]
+    depends_on:
+      redis: { condition: service_healthy }
+    command: ["--broker=redis://redis:6379/0", "--port=5555"]
+    ports:
+      - "127.0.0.1:5555:5555"   # bind to localhost only; reach via tailnet SSH tunnel if needed
+
+networks:
+  mcp-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  hf-cache:
