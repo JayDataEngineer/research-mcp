@@ -8,8 +8,9 @@
 #   docker compose up -d --build
 #
 # Expose over Tailscale (host-side, not part of compose):
-#   tailscale funnel --bg --https=443 http://127.0.0.1:8327
-# Client URL:  https://<node>.ts.net/mcp  (or http://<node>:8327/mcp on tailnet)
+#   tailscale serve --set-path /research http://127.0.0.1:41827
+# Client URL:  https://<node>.ts.net:10000/research/mcp  (via serve)
+#              http://localhost:41827/mcp                (host only)
 
 services:
   postgres:
@@ -63,7 +64,8 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - "8327:8000"   # host 8327 → container 8000 (matches existing tailscale funnel)
+      # Uncommon host port, bound to localhost only — reach via tailscale serve
+      - "127.0.0.1:41827:8000"
     networks: [mcp-net]
     depends_on:
       postgres: { condition: service_healthy }
@@ -142,7 +144,8 @@ services:
     networks: [mcp-net]
     depends_on:
       redis: { condition: service_healthy }
-    command: ["--broker=redis://redis:6379/0", "--port=5555"]
+    # mher/flower has no ENTRYPOINT, CMD ["celery","flower"]; override with full prefix.
+    command: ["celery", "flower", "--broker=redis://redis:6379/0", "--port=5555"]
     ports:
       - "127.0.0.1:5555:5555"   # bind to localhost only; reach via tailnet SSH tunnel if needed
 
