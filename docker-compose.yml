@@ -50,6 +50,11 @@ services:
     restart: unless-stopped
     environment:
       SEARXNG_BASE_URL: http://searxng:8080
+    volumes:
+      # Stock SearXNG defaults enable bot_detection (403s internal clients) and
+      # disable JSON output — both break research-mcp's search backend. Mount
+      # our tuned config so /search?format=json actually returns results.
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     networks: [mcp-net]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || wget -qO- http://localhost:8080/ >/dev/null 2>&1"]

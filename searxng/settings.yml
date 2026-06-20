@@ -1,0 +1,64 @@
+# SearXNG settings for research-mcp (internal-only meta-search).
+#
+# Adapted from the polished local-web-mcp config that was in ray/infra/repos.
+# Critical vs. stock defaults:
+#   - limiter: false        (stock SearXNG 403s internal clients via bot_detection)
+#   - botdetection.* false  (same reason — no link_token dance for /search?format=json)
+#   - search.formats: json  (JSON output is OFF by default in SearXNG ≥ 2023.x)
+#
+# Without these, every call to /search?format=json from research-mcp returns
+# HTTP 403 and silently yields zero results — fact-checks come back empty.
+
+use_default_settings: true
+
+server:
+  secret_key: "96oGHQLJACTY03wfCZWEFDlWmQgntmeD"   # matches the previous in-container key
+  limiter: false
+  image_proxy: true
+  port: 8080
+  bind_address: "0.0.0.0"
+  public_instance: false
+
+# Redis is required by SearXNG even with the limiter off (it stores engine
+# state/suspensions). Use DB 2 to avoid clashing with celery broker (DB 0)
+# and any app-level cache (DB 1).
+redis:
+  url: redis://redis:6379/2
+
+botdetection:
+  ip_limit:
+    enabled: false
+  link_token:
+    enabled: false
+
+search:
+  formats:
+    - html
+    - json
+    - csv
+    - rss
+  timeout: 3.0
+  max_results: 100
+  ban_time_on_fail: 5
+  max_ban_time_on_fail: 120
+  suspended_times:
+    SearxEngineAccessDenied: 86400      # 1 day — site blocked us
+    SearxEngineCaptcha: 86400           # 1 day — CAPTCHA challenge
+    SearxEngineTooManyRequests: 3600    # 1 hour — rate limited
+
+engines:
+  - name: duckduckgo
+    disabled: false
+    timeout: 3.0
+  - name: brave
+    disabled: false
+    timeout: 3.0
+  - name: bing
+    disabled: false
+    timeout: 1.5    # Bing is unreliable — cut it off fast
+  # google omitted — it's the first to CAPTCHA/block, and the research tool
+  # gets enough coverage from ddg + brave + bing.
+
+outgoing:
+  request_timeout: 3.0
+  max_request_timeout: 6.0
