@@ -1,4 +1,4 @@
-"""Profile search_web performance - measures search latency and result counts.
+"""Profile search latency and result counts against the live search service.
 
 Usage:
     docker exec mcp-server python /app/profiling/profile_search.py
@@ -52,7 +52,7 @@ async def profile_search(query: str, pages: int = 3, top_k: int = 20, runs: int 
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Profile search_web performance")
+    parser = argparse.ArgumentParser(description="Profile search performance")
     parser.add_argument("--pages", type=int, default=3, help="Pages per search")
     parser.add_argument("--top-k", type=int, default=20, help="Max results")
     parser.add_argument("--runs", type=int, default=3, help="Runs per query")

@@ -35,15 +35,15 @@ Thumbs.db
 # Build artifacts
 .pytest_cache/
 .coverage
+.mypy_cache/
+.ruff_cache/
 
 # Git backup (emergency recovery)
 .git.backup/
 
-# Project notes
+# Local-only project notes (not shipped)
 UPDATES.md
-docs_config.yaml
-CLAUDE.md
-reference
+reference/
 llm_models/
 benchmark_*.sh
 quick_bench.sh

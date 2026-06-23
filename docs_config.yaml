@@ -1,0 +1,35 @@
+# Documentation sources for the web research MCP server.
+# Each entry needs a name and an llms_txt URL.
+# Domains linked within llms.txt files are auto-discovered and allowed.
+
+# LangChain ecosystem
+- name: langchain
+  llms_txt: https://docs.langchain.com/llms.txt
+
+- name: langgraph
+  llms_txt: https://langchain-ai.github.io/langgraph/llms.txt
+
+# MCP
+- name: fastmcp
+  llms_txt: https://gofastmcp.com/llms.txt
+
+- name: mcp-spec
+  llms_txt: https://modelcontextprotocol.io/llms.txt
+
+# Data validation
+- name: pydantic
+  llms_txt: https://docs.pydantic.dev/llms.txt
+
+- name: pydantic-ai
+  llms_txt: https://ai.pydantic.dev/llms.txt
+
+# Container platform
+- name: docker
+  llms_txt: https://docs.docker.com/llms.txt
+
+# Frontend
+- name: nextjs
+  llms_txt: https://nextjs.org/llms.txt
+
+- name: ai-sdk
+  llms_txt: https://ai-sdk.dev/llms.txt

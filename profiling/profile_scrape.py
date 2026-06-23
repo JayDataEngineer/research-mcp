@@ -1,4 +1,4 @@
-"""Profile scrape_url performance - measures each stage of the scraping pipeline.
+"""Profile each stage of the scraping pipeline against a live URL.
 
 Usage:
     docker exec mcp-server python /app/profiling/profile_scrape.py
@@ -92,7 +92,7 @@ async def profile_url(url: str, runs: int = 3) -> dict:
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Profile scrape_url performance")
+    parser = argparse.ArgumentParser(description="Profile scrape pipeline performance")
     parser.add_argument("--url", help="Single URL to profile")
     parser.add_argument("--runs", type=int, default=3, help="Number of runs per URL")
     args = parser.parse_args()
