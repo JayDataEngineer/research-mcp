@@ -129,9 +129,11 @@ def create_proxied_client(
     timeout: float = 30.0,
     follow_redirects: bool = True,
     target_url: str | None = None,
+    *,
+    retries: int = 3,
     **kwargs,
 ) -> httpx.AsyncClient:
-    """Create an httpx.AsyncClient with proxy settings applied.
+    """Create an httpx.AsyncClient with proxy settings and retry transport.
 
     If proxy is disabled or target is excluded, creates a regular client.
 
@@ -139,6 +141,9 @@ def create_proxied_client(
         timeout: Request timeout in seconds.
         follow_redirects: Whether to follow redirects.
         target_url: The URL being requested (for exclusion checking).
+        retries: Transient-failure retries (connect/timeout/5xx/429).
+            Set to 0 to disable — e.g. for callers that already implement
+            their own retry loop (Crawl4AI, SeleniumBase).
         **kwargs: Additional arguments passed to httpx.AsyncClient.
     """
     manager = get_proxy_manager()
@@ -152,6 +157,13 @@ def create_proxied_client(
         },
         **kwargs,
     }
+
+    if retries > 0 and "transport" not in client_kwargs:
+        # Install the retry transport as the outermost transport. It wraps
+        # httpx.AsyncHTTPTransport and replays transient failures so callers
+        # don't have to sprinkle try/except around every request.
+        from .http_client import make_retry_transport
+        client_kwargs["transport"] = make_retry_transport(retries=retries)
 
     if proxy_url:
         client_kwargs["proxy"] = proxy_url

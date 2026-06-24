@@ -1,11 +1,26 @@
 """Celery task for scraping with concurrency control and caching"""
 
+import redis as _redis
+
 from ..celery_app import app
 from ..tasks.base import BaseTask
 from ..scrapers.base import scrape_with_fallback
 
 
-@app.task(bind=True, base=BaseTask, name="scrape_task")
+@app.task(
+    bind=True,
+    base=BaseTask,
+    name="scrape_task",
+    # Retries only on transient infrastructure failures — never on logic
+    # errors (KeyError/ValueError/etc. would mask bugs if retried).
+    # Exponential backoff 1s → 2s → 4s, max 3 attempts, with jitter so a
+    # broker blip doesn't synchronously hammer every queued URL.
+    autoretry_for=(_redis.exceptions.ConnectionError, ConnectionError, TimeoutError, OSError),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+    max_retries=3,
+)
 def scrape_task(
     self,
     url: str,
