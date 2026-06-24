@@ -292,9 +292,9 @@ if __name__ == "__main__":
     host = settings.host
 
     logger.info(f"MCP HTTP server starting on {host}:{port}")
-    logger.info(f"Direct access: http://localhost:{port}/mcp")
-    logger.info(f"Via Caddy+Tailscale: http://<your-tailscale-ip>/mcp")
-    logger.info(f"Via MagicDNS+Caddy: https://<hostname>.<tailnet>.ts.net/mcp")
+    logger.info(f"In-container:  http://localhost:{port}/mcp")
+    logger.info(f"Host binding:  http://127.0.0.1:<host-port>/mcp  (see docker-compose.yml)")
+    logger.info(f"Tailnet:       https://<node>.ts.net:10000/research/mcp  (via tailscale serve)")
     logger.info(f"Session state: Redis @ {REDIS_HOST}:{REDIS_PORT}")
     logger.info(f"Caching: enabled (search: {SEARCH_CACHE_TTL}s, scrape: {SCRAPE_CACHE_TTL}s)")
     logger.info(f"Web tools: research, search, scrape, extract, list_schemas, map, crawl")
