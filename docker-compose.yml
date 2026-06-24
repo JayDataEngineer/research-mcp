@@ -68,6 +68,12 @@ services:
     container_name: mcp-server
     init: true
     restart: unless-stopped
+    labels:
+      # Lets the autoheal sidecar force-restart on healthcheck failure.
+      # restart: unless-stopped only fires on container exit; autoheal covers
+      # the alive-but-hung failure mode (FastMCP stuck mid-streaming, Florence-2
+      # deadlocked, etc.).
+      autoheal: "true"
     ports:
       # Uncommon host port, bound to localhost only — reach via tailscale serve
       - "127.0.0.1:41827:8000"
@@ -109,6 +115,8 @@ services:
     container_name: mcp-celery-worker
     init: true
     restart: unless-stopped
+    labels:
+      autoheal: "true"
     networks: [mcp-net]
     depends_on:
       redis:    { condition: service_healthy }
@@ -127,6 +135,15 @@ services:
       SEARXNG_URL: http://searxng:8080
       MCP_PROXY_URL: ${MCP_PROXY_URL:-}
       MCP_PROXY_URLS: ${MCP_PROXY_URLS:-}
+    healthcheck:
+      # Pings the worker's own worker-process. The -d (destination) targets
+      # 'celery@<container hostname>' which is the worker's nodename default.
+      # A healthy worker replies within the timeout; a wedged one doesn't.
+      test: ["CMD-SHELL", "celery -A src.celery_app inspect ping -d 'celery@$$(hostname)' --timeout=10 -j 2>&1 | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
 
   celery-beat:
     image: research-mcp:latest
@@ -146,6 +163,8 @@ services:
     image: mher/flower:latest
     container_name: mcp-flower
     restart: unless-stopped
+    labels:
+      autoheal: "true"
     networks: [mcp-net]
     depends_on:
       redis: { condition: service_healthy }
@@ -153,6 +172,30 @@ services:
     command: ["celery", "flower", "--broker=redis://redis:6379/0", "--port=5555"]
     ports:
       - "127.0.0.1:5555:5555"   # bind to localhost only; reach via tailnet SSH tunnel if needed
+    healthcheck:
+      # mher/flower exposes GET /healthcheck → "OK" with 200.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5555/healthcheck 2>&1 | grep -q OK || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Watches for unhealthy containers (label: autoheal=true) and force-restarts
+  # them. `restart: unless-stopped` alone will not recover a worker that's
+  # hung-but-alive (FastMCP wedged, Celery stopped consuming, Flower UI
+  # frozen). Stop timeout is 30s so Celery can finish the current task if
+  # possible. Socket mounted read-only; sidecar only acts on the label, so
+  # unrelated host containers are untouched.
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: research-autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL_SECONDS: 5
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 networks:
   mcp-net:
