@@ -136,22 +136,20 @@ services:
       MCP_PROXY_URL: ${MCP_PROXY_URL:-}
       MCP_PROXY_URLS: ${MCP_PROXY_URLS:-}
     healthcheck:
-      # Pings the worker's own worker-process. The -d (destination) targets
-      # 'celery@<container hostname>' which is the worker's nodename default.
-      # A healthy worker replies within the timeout; a wedged one doesn't.
+      # Broadcast ping on the broker — any celery consumer that replies 'pong'
+      # means the worker is alive and consuming. We intentionally do NOT use
+      # -d 'celery@<hostname>': celery's --destination flag switches to direct
+      # routing on a queue the worker doesn't listen on by default, so it
+      # silently returns 'No nodes replied' even on a healthy worker
+      # (confirmed empirically — see git log for this healthcheck).
       #
-      # Timing: celery-worker cold-starts heavy imports (Crawl4AI drags in
-      # Playwright, SeleniumBase, asyncpg...). On this host that takes ~3 min
-      # before the worker answers 'celery inspect ping'. start_period=240s
-      # gives that window; with interval=60s and retries=3 the worker has
-      # 240 + 60*3 = 420s of grace before being marked unhealthy. Tighter
-      # windows cause a restart feedback loop (autoheal kills it before it
-      # finishes starting) which never converges.
-      test: ["CMD-SHELL", "celery -A src.celery_app inspect ping -d 'celery@$$(hostname)' --timeout=20 2>&1 | grep -q pong || exit 1"]
-      interval: 60s
+      # Timing: worker reaches 'ready' in ~5s on this host once imports finish;
+      # start_period=60s covers a slow cold start (Crawl4AI/Playwright loads).
+      test: ["CMD-SHELL", "celery -A src.celery_app inspect ping --timeout=20 2>&1 | grep -q pong || exit 1"]
+      interval: 30s
       timeout: 30s
       retries: 3
-      start_period: 240s
+      start_period: 60s
 
   celery-beat:
     image: research-mcp:latest
