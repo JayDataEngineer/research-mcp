@@ -50,3 +50,6 @@ llm_models/
 benchmark_*.sh
 quick_bench.sh
 run_tps_bench.sh
+
+# User-local overrides — copy from docs_config.example.yaml
+docs_config.yaml

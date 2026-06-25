@@ -66,3 +66,10 @@ engines:
 outgoing:
   request_timeout: 3.0
   max_request_timeout: 6.0
+  # ANONYMIZATION GAP: by default SearXNG queries Brave/Bing/DDG from the
+  # host's real IP. research-mcp's MCP_PROXY_URL only covers research-mcp's
+  # own direct HTTP (scrape/extract/crawl) — SearXNG's outbound is independent.
+  # To route search engine queries through a proxy, uncomment and set:
+  # proxies:
+  #   all://: socks5://gluetun:1080
+  # (SearXNG uses httpx-style proxy dict syntax; socks5 requires httpx-socks.)

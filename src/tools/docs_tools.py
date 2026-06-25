@@ -12,6 +12,7 @@ from typing import Annotated
 from fastmcp import Context
 from fastmcp.exceptions import ToolError
 from pydantic import Field
+import os
 import re
 from urllib.parse import urlparse
 
@@ -19,7 +20,13 @@ from urllib.parse import urlparse
 # Get settings
 from ..settings import get_settings
 _settings = get_settings()
+# User-overridable docs_config.yaml takes precedence; fall back to the
+# example shipped with the image. This lets forks mount their own
+# /app/docs_config.yaml (or set MCP_DOCS_CONFIG_PATH) without their
+# customizations being clobbered on git pull / image rebuild.
 DOCS_CONFIG_PATH = _settings.docs_config_path
+if not os.path.exists(DOCS_CONFIG_PATH):
+    DOCS_CONFIG_PATH = "/app/docs_config.example.yaml"
 DOCS_LOCAL_DIR = _settings.docs_local_dir
 
 

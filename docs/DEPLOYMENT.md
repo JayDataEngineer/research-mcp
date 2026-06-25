@@ -18,7 +18,7 @@ Each MCP server lives in a sibling directory at
 ├── docker-compose.yml
 ├── Dockerfile
 ├── searxng/settings.yml      # SearXNG config (JSON format, no bot-detection)
-├── docs_config.yaml          # allowlist for docs_fetch_docs
+├── docs_config.example.yaml  # shipped allowlist for docs_fetch_docs (docs_config.yaml overrides)
 ├── .env                      # local secrets (not tracked)
 └── ...
 ```
@@ -72,6 +72,7 @@ Postgres / Redis / SearXNG.
   that block internal clients. Confirm `searxng/settings.yml` is mounted
   (`limiter: false`, `botdetection.*.enabled: false`, `formats: [html, json, csv, rss]`).
 - **`docs_fetch_docs` returns "URL not allowed"** — the tool only accepts URLs
-  on domains allowlisted in `docs_config.yaml` (or auto-discovered via llms.txt).
+  on domains allowlisted in `docs_config.yaml` (or `docs_config.example.yaml`
+  fallback) — or auto-discovered via llms.txt.
 - **Scraped content empty** — try `method=crawl4ai` explicitly; some domains
   need JS rendering. The server learns working methods per-domain.

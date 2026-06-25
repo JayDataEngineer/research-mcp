@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     rate_limit_ttl: int = 300
 
     # Documentation Configuration
+    # /app/docs_config.yaml (user override) — falls back to /app/docs_config.example.yaml
     docs_config_path: str = "/app/docs_config.yaml"
     docs_local_dir: str = "/app/docs_local"
 

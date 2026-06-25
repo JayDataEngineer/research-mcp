@@ -186,7 +186,7 @@ The SearXNG config is mounted from [`searxng/settings.yml`](searxng/settings.yml
 
 ## Documentation Sources
 
-Allowlisted in [`docs_config.yaml`](docs_config.yaml): langchain, langgraph,
+Allowlisted in [`docs_config.example.yaml`](docs_config.example.yaml): langchain, langgraph,
 fastmcp, mcp-spec, pydantic, pydantic-ai, docker, nextjs, ai-sdk. Domains
 linked from each entry's `llms.txt` are auto-allowed.
 
