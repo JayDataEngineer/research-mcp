@@ -1,4 +1,4 @@
-# Research MCP — web research, scraping, structured extraction, Florence-2 vision.
+# Research MCP — web research, scraping, structured extraction.
 #
 # Stack: postgres (domain tracking) + redis (cache + Celery broker)
 #        + searxng (meta search) + mcp-server + celery worker/beat + flower.
@@ -50,6 +50,10 @@ services:
     restart: unless-stopped
     environment:
       SEARXNG_BASE_URL: http://searxng:8080
+      # Session-cookie HMAC. If unset, SearXNG's entrypoint generates a random
+      # one on each container start (cookies invalidated on restart). Set in
+      # .env for persistence.
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
     volumes:
       # Stock SearXNG defaults enable bot_detection (403s internal clients) and
       # disable JSON output — both break research-mcp's search backend. Mount
@@ -71,7 +75,7 @@ services:
     labels:
       # Lets the autoheal sidecar force-restart on healthcheck failure.
       # restart: unless-stopped only fires on container exit; autoheal covers
-      # the alive-but-hung failure mode (FastMCP stuck mid-streaming, Florence-2
+      # the alive-but-hung failure mode (FastMCP stuck mid-streaming,
       # deadlocked, etc.).
       autoheal: "true"
     ports:
@@ -100,9 +104,6 @@ services:
       MCP_PROXY_URL: ${MCP_PROXY_URL:-}
       MCP_PROXY_URLS: ${MCP_PROXY_URLS:-}
       MCP_PROXY_ROTATION: ${MCP_PROXY_ROTATION:-round-robin}
-    volumes:
-      # Persist Florence-2 weights across rebuilds (transformers default cache location).
-      - hf-cache:/root/.cache/huggingface
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 15s
@@ -210,4 +211,3 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  hf-cache:

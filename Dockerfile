@@ -51,13 +51,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 
-# Force-install PyTorch CPU-only AFTER uv sync.
-# uv sync pulls CUDA variants from PyPI; this replaces them with CPU-only (~190MB vs 2GB+).
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python /app/.venv/bin/python \
-    --force-reinstall \
-    torch torchvision --index-url https://download.pytorch.org/whl/cpu
-
 # Install Playwright Chromium to /app/.playwright (NOT /app/.cache — the
 # deployment mounts an emptyDir at /app/.cache which would shadow image-baked
 # browsers, making them invisible at runtime).

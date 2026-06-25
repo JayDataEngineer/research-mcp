@@ -12,7 +12,11 @@
 use_default_settings: true
 
 server:
-  secret_key: "96oGHQLJACTY03wfCZWEFDlWmQgntmeD"   # matches the previous in-container key
+  # Placeholder — the official SearXNG entrypoint.sh sed-replaces the literal
+  # "ultrasecretkey" with a random value on first start. For session cookie
+  # persistence across restarts, set SEARXNG_SECRET in .env (see docker-compose),
+  # which takes precedence via SettingsValue(environ_name='SEARXNG_SECRET').
+  secret_key: "ultrasecretkey"
   limiter: false
   image_proxy: true
   port: 8080

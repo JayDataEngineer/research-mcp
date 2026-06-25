@@ -71,7 +71,7 @@ curl -X POST http://localhost:41827/mcp \
                  "clientInfo":{"name":"probe","version":"1"}}}'
 ```
 
-## Tools (18 total)
+## Tools (17 total)
 
 ### Search & Scrape
 
@@ -196,12 +196,10 @@ Non-mocked e2e harness against the live server:
 
 ```bash
 python tests/e2e/test_research.py
-# 16 passed, 0 failed
+# 17 passed, 0 failed
 ```
 
-See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for deployment details and
-[`docs/CRAWL_4AI_PATTERNS.md`](docs/CRAWL_4AI_PATTERNS.md) for scraper
-patterns reference.
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for deployment details.
 
 ## Tech Stack
 
