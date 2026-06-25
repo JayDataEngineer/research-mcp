@@ -31,6 +31,10 @@ TEST_QUERY = "python programming language"
 TEST_SCRAPE_URL = "https://example.com/"           # trivially scrapable, stable
 TEST_MAP_DOMAIN = "example.com"
 TEST_DOCS_QUERY = "python requests library"
+# Small (~30KB) public landscape JPEG — exercises the analyze_image tool and,
+# on a fresh hf-cache volume, triggers the Florence-2 download so we verify
+# the from-scratch weight-fetch path lands inside the volume.
+TEST_IMAGE_URL = "https://www.gstatic.com/webp/gallery/1.jpg"
 
 # Tools that mutate server state — call last
 MUTATING_TOOLS = {"reset", "clear_blacklist", "proxy_rotate"}
@@ -64,6 +68,17 @@ def make_tests() -> list[tuple[str, dict, str]]:
         ("docs_fetch_docs",
          {"url": "https://docs.pydantic.dev/latest/"},
          "fetch docs page as markdown (must be a known docs domain)"),
+
+        # --- Vision (exercises the hf-cache volume: Florence-2) ---
+        ("analyze_image",
+         {"imageSource": TEST_IMAGE_URL,
+          "prompt": "Describe this image in one sentence."},
+         "Florence-2 image description (cold cache → downloads weights)"),
+
+        # --- Deep crawl (bounded; example.com is tiny so this stays fast) ---
+        ("crawl",
+         {"url": "https://example.com/", "max_pages": 2, "max_depth": 1},
+         "bounded deep crawl of example.com"),
 
         # --- Proxy tools (proxy_test hits the network) ---
         ("proxy_test", {}, "test proxy connectivity (may fail if no proxy configured)"),
@@ -109,6 +124,26 @@ def validate(tool: str, r: ToolResult) -> tuple[bool, str]:
     if tool == "map" and isinstance(s, dict):
         urls = s.get("urls", [])
         return True, f"{len(urls)} URLs discovered"
+    if tool == "analyze_image" and isinstance(s, dict):
+        # Response shape: {success, task, results: {<task>: "<generated text>"}}
+        # Florence-2 nested under results[task]; pull the first non-empty value.
+        results = s.get("results", {})
+        text = ""
+        if isinstance(results, dict):
+            for v in results.values():
+                if isinstance(v, str) and v.strip():
+                    text = v.strip()
+                    break
+        if len(text) < 10:
+            return False, f"analyze_image returned thin output: {str(s)[:120]!r}"
+        return True, f"vision output ({len(text)} chars): {text[:60]!r}"
+    if tool == "crawl" and isinstance(s, dict):
+        pages = s.get("pages", s.get("results", []))
+        if not isinstance(pages, list):
+            pages = []
+        # example.com is a single-page site; 0+ pages is acceptable as long as
+        # the call didn't error — we mainly want to exercise the crawl path.
+        return True, f"{len(pages)} page(s) crawled"
     return True, "ok"
 
 
