@@ -33,14 +33,16 @@ The MCP endpoint listens on `http://localhost:41827/mcp` (host-bound to
 sudo tailscale serve --bg --https=10000 --set-path /research http://127.0.0.1:41827
 ```
 
-Client URL: `https://cloud.tailb1e597.ts.net:10000/research/mcp`
+Client URL: `https://<node>.ts.net:10000/research/mcp` (replace `<node>` with
+your tailnet node name — see `.env.example`).
 
 ## Connecting from MCP Clients
 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http research https://cloud.tailb1e597.ts.net:10000/research/mcp
+# Replace <node> with your tailnet node name
+claude mcp add --transport http research https://<node>.ts.net:10000/research/mcp
 ```
 
 ### Claude Desktop
@@ -52,7 +54,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "research": {
       "type": "http",
-      "url": "https://cloud.tailb1e597.ts.net:10000/research/mcp"
+      "url": "https://<node>.ts.net:10000/research/mcp"
     }
   }
 }

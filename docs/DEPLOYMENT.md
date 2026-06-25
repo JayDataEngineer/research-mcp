@@ -51,7 +51,8 @@ Run once on the host (not in compose):
 sudo tailscale serve --bg --https=10000 --set-path /research http://127.0.0.1:41827
 ```
 
-Now reachable at `https://cloud.tailb1e597.ts.net:10000/research/mcp`.
+Now reachable at `https://<node>.ts.net:10000/research/mcp` (replace `<node>`
+with your tailnet node name — see `.env.example`).
 
 To remove:
 

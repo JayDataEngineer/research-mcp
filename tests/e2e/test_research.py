@@ -23,7 +23,7 @@ from mcp_client import McpClient, ToolResult  # noqa: E402
 
 DEFAULT_URL = os.environ.get(
     "RESEARCH_MCP_URL",
-    "https://cloud.tailb1e597.ts.net:10000/research/mcp",
+    "http://localhost:41827/mcp",
 )
 
 # Stable test fixtures
