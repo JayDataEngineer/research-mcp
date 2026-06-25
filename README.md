@@ -150,7 +150,14 @@ curl -X POST http://localhost:41827/mcp \
 ## Configuration
 
 All configurable values live in `.env` (see `.env.example`). Only
-`POSTGRES_PASSWORD` is required.
+`POSTGRES_PASSWORD` is required — every other variable has a sensible
+default. The stack ships with **no VPN/proxy dependency**: gluetun,
+WireGuard, and friends are entirely optional. If `MCP_PROXY_URL` /
+`MCP_PROXY_URLS` are unset, all scraping goes direct and the proxy
+tools (`proxy_status` / `proxy_test` / `proxy_rotate`) return a clean
+"not configured" message. To route through a proxy, set one of those
+env vars to point at any HTTP or SOCKS5 endpoint (gluetun, a
+commercial SOCKS provider, etc.).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
