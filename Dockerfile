@@ -51,9 +51,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 
-# Install Playwright Chromium to /app/.playwright (NOT /app/.cache — the
-# deployment mounts an emptyDir at /app/.cache which would shadow image-baked
-# browsers, making them invisible at runtime).
+# Install Playwright Chromium to /app/.playwright (a fixed, image-baked path).
+# Keeping it out of the default /app/.cache means a runtime cache volume mount
+# (or `docker run -v /tmp:/app/.cache ...`) won't shadow the browsers.
 RUN mkdir -p /app/.cache /app/.playwright && \
     PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
     .venv/bin/playwright install --with-deps chromium
@@ -128,7 +128,7 @@ COPY docs_config.example.yaml /app/docs_config.example.yaml
 COPY profiling/ /app/profiling/
 COPY tests/ /app/tests/
 COPY pyproject.toml /app/pyproject.toml
-# Copy Playwright browser cache (at /app/.playwright — outside the emptyDir mount)
+# Copy Playwright browsers into the same image-baked path (outside /app/.cache)
 COPY --from=builder /app/.playwright /app/.playwright
 
 # Create data directory

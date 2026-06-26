@@ -6,7 +6,7 @@ Notes for standing up the research-mcp stack on a fresh Linux host.
 
 - Docker + Docker Compose v2
 - Tailscale (for remote access)
-- ~4 GB RAM headroom (the stack peaks around 2 GB)
+- ~2 GB RAM headroom (stack idles around 150MB; peaks near 1GB during active Playwright/Chrome scraping)
 
 ## Layout
 
