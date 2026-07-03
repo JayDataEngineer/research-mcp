@@ -1,39 +1,39 @@
 """MCP Server Tools - Modular organization
 
 This package exports all MCP tools organized by functionality:
-- Web tools: research, search, scrape, extract, list_schemas
-- Crawl tools: map, crawl
-- Docs tools: docs_list_sources, docs_fetch_docs
-- Admin tools: domains, stats, reset, clear_blacklist
-- Proxy tools: proxy_status, proxy_test, proxy_rotate
+- Web tools: research, search, fetch, extract, schemas
+- Crawl tools: discover, crawl
+- Docs tools: list_docs, read_docs
+- Admin tools: domains, stats, reset, unblock
+- Proxy tools: proxy_status, test_proxy, rotate_proxy
 """
 
-from .web_tools import research, search, scrape, extract, list_schemas
-from .crawl_tools import map, crawl
-from .docs_tools import docs_list_sources, docs_fetch_docs
-from .admin_tools import domains, stats, reset, clear_blacklist
-from .proxy_tools import proxy_status, proxy_test, proxy_rotate
+from .web_tools import research, search, fetch, extract, schemas
+from .crawl_tools import discover, crawl
+from .docs_tools import list_docs, read_docs
+from .admin_tools import domains, stats, reset, unblock
+from .proxy_tools import proxy_status, test_proxy, rotate_proxy
 
 __all__ = [
     # Web tools
     "research",
     "search",
-    "scrape",
+    "fetch",
     "extract",
-    "list_schemas",
+    "schemas",
     # Crawl tools
-    "map",
+    "discover",
     "crawl",
     # Docs tools
-    "docs_list_sources",
-    "docs_fetch_docs",
+    "list_docs",
+    "read_docs",
     # Admin tools
     "domains",
     "stats",
     "reset",
-    "clear_blacklist",
+    "unblock",
     # Proxy tools
     "proxy_status",
-    "proxy_test",
-    "proxy_rotate",
+    "test_proxy",
+    "rotate_proxy",
 ]

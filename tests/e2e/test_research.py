@@ -33,24 +33,24 @@ TEST_MAP_DOMAIN = "example.com"
 TEST_DOCS_QUERY = "python requests library"
 
 # Tools that mutate server state — call last
-MUTATING_TOOLS = {"reset", "clear_blacklist", "proxy_rotate"}
+MUTATING_TOOLS = {"reset", "unblock", "rotate_proxy"}
 
 
 def make_tests() -> list[tuple[str, dict, str]]:
     return [
         # --- Read-only inspection tools ---
-        ("list_schemas", {}, "list extraction schemas"),
+        ("schemas", {}, "list extraction schemas"),
         ("domains", {}, "list tracked domains (may be empty)"),
         ("stats", {}, "scrape statistics"),
         ("proxy_status", {}, "proxy configuration"),
-        ("docs_list_sources", {}, "documentation sources catalog"),
+        ("list_docs", {}, "documentation sources catalog"),
 
         # --- Search/scrape (network-dependent) ---
         ("search", {"query": TEST_QUERY, "top_k": 3}, "SearXNG meta-search"),
         ("research", {"query": TEST_QUERY, "max_results": 2}, "search + scrape top results"),
-        ("scrape", {"url": TEST_SCRAPE_URL}, "scrape a single page"),
-        ("map", {"domain": TEST_MAP_DOMAIN, "max_urls": 5}, "discover URLs via sitemap"),
-        ("process_html",
+        ("fetch", {"url": TEST_SCRAPE_URL}, "scrape a single page"),
+        ("discover", {"domain": TEST_MAP_DOMAIN, "max_urls": 5}, "discover URLs via sitemap"),
+        ("clean_html",
          {"html": "<html><head><title>Test</title></head><body><article>"
                   "<h1>Hello World</h1>"
                   "<p>This is a test paragraph with enough text to survive cleaning.</p>"
@@ -61,7 +61,7 @@ def make_tests() -> list[tuple[str, dict, str]]:
         ("extract",
          {"url": TEST_SCRAPE_URL, "schema_type": "blog"},
          "structured extraction (example.com is thin — may return empty)"),
-        ("docs_fetch_docs",
+        ("read_docs",
          {"url": "https://docs.pydantic.dev/latest/"},
          "fetch docs page as markdown (must be a known docs domain)"),
 
@@ -70,13 +70,13 @@ def make_tests() -> list[tuple[str, dict, str]]:
          {"url": "https://example.com/", "max_pages": 2, "max_depth": 1},
          "bounded deep crawl of example.com"),
 
-        # --- Proxy tools (proxy_test hits the network) ---
-        ("proxy_test", {}, "test proxy connectivity (may fail if no proxy configured)"),
+        # --- Proxy tools (test_proxy hits the network) ---
+        ("test_proxy", {}, "test proxy connectivity (may fail if no proxy configured)"),
 
         # --- Mutating tools — run last so they don't disturb earlier reads ---
-        ("clear_blacklist", {}, "clear blacklist (no-op if empty)"),
+        ("unblock", {}, "clear blacklist (no-op if empty)"),
         ("reset", {}, "reset domain tracking (no-op if empty)"),
-        ("proxy_rotate", {}, "rotate proxy (no-op if single proxy)"),
+        ("rotate_proxy", {}, "rotate proxy (no-op if single proxy)"),
     ]
 
 
@@ -101,17 +101,17 @@ def validate(tool: str, r: ToolResult) -> tuple[bool, str]:
     if tool == "research" and isinstance(s, dict):
         results = s.get("results", [])
         return True, f"{len(results)} results (research can legitimately be 0 for obscure queries)"
-    if tool == "scrape" and isinstance(s, dict):
+    if tool == "fetch" and isinstance(s, dict):
         content = s.get("content", "") or s.get("markdown", "")
         if not content:
-            return False, "scrape returned empty content"
+            return False, "fetch returned empty content"
         return True, f"{len(content)} chars scraped"
-    if tool == "process_html" and isinstance(s, dict):
+    if tool == "clean_html" and isinstance(s, dict):
         content = s.get("content", "") or s.get("markdown", "")
         if "Hello World" not in content:
             return False, f"expected 'Hello' in output, got: {content[:100]!r}"
         return True, "markdown contains expected text"
-    if tool == "map" and isinstance(s, dict):
+    if tool == "discover" and isinstance(s, dict):
         urls = s.get("urls", [])
         return True, f"{len(urls)} URLs discovered"
     if tool == "crawl" and isinstance(s, dict):

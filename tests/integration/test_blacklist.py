@@ -1,7 +1,7 @@
 """Integration tests for the blacklist system.
 
 Tests the 24-hour failure window, auto-blacklist threshold,
-domain recovery, and clear_blacklist tool.
+domain recovery, and unblock tool.
 """
 
 import pytest
@@ -202,7 +202,7 @@ async def test_cleanup_old_blacklisted(db):
 
 @pytest.mark.asyncio
 async def test_clear_blacklist_tool(mcp_client, session):
-    """clear_blacklist tool unblacklists all domains."""
+    """unblock tool unblacklists all domains."""
     from src.db.database import Database
 
     db_obj = Database()
@@ -215,7 +215,7 @@ async def test_clear_blacklist_tool(mcp_client, session):
 
         # Call the tool
         result = await call_tool(
-            mcp_client, session, "clear_blacklist", {}
+            mcp_client, session, "unblock", {}
         )
         assert result["status"] == "success"
         assert result["domains_unblacklisted"] >= 1

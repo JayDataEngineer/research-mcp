@@ -1,8 +1,8 @@
 """Documentation Tools
 
 Tools for fetching documentation from llms.txt sources.
-- docs_list_sources: List available documentation libraries
-- docs_fetch_docs: Fetch documentation from a URL
+- list_docs: List available documentation libraries
+- read_docs: Fetch documentation from a URL
 
 Note: Caching is now handled by FastMCP's ResponseCachingMiddleware
 """
@@ -182,7 +182,7 @@ def _extract_domain(url: str) -> str:
     return parsed.netloc.replace("www.", "")
 
 
-async def docs_list_sources(ctx: Context | None = None) -> str:
+async def list_docs(ctx: Context | None = None) -> str:
     """List all available documentation libraries and their llms.txt URLs.
 
     START HERE to discover which documentation libraries are available.
@@ -191,9 +191,9 @@ async def docs_list_sources(ctx: Context | None = None) -> str:
 
     WORKFLOW:
     1. Call this tool first to get available libraries
-    2. Call docs_fetch_docs() with a library's llms.txt URL
+    2. Call read_docs() with a library's llms.txt URL
     3. Read the returned index to find specific documentation URLs
-    4. Call docs_fetch_docs() again with those specific URLs to get actual content
+    4. Call read_docs() again with those specific URLs to get actual content
 
     Returns:
         Formatted list of documentation sources with their URLs
@@ -215,15 +215,15 @@ async def docs_list_sources(ctx: Context | None = None) -> str:
     return "\n".join(lines)
 
 
-async def docs_fetch_docs(
-    url: Annotated[str, Field(description="The documentation URL to fetch. Use URLs from docs_list_sources or links found in llms.txt files.")],
+async def read_docs(
+    url: Annotated[str, Field(description="The documentation URL to fetch. Use URLs from list_docs or links found in llms.txt files.")],
     ctx: Context | None = None
 ) -> str:
     """Fetch documentation from a URL and convert to clean Markdown.
 
     CRITICAL WORKFLOW - This is a TWO-STEP process:
 
-    1. FIRST CALL: Fetch the llms.txt URL (from docs_list_sources). This returns
+    1. FIRST CALL: Fetch the llms.txt URL (from list_docs). This returns
        an INDEX of markdown links, not the actual documentation.
 
     2. READ THE INDEX: The returned markdown contains links like:

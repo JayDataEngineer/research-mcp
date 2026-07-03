@@ -40,8 +40,8 @@ async def test_domains(mcp_client, session):
 
 @pytest.mark.asyncio
 async def test_list_schemas(mcp_client, session):
-    """list_schemas returns available extraction schemas."""
-    result = await call_tool(mcp_client, session, "list_schemas", {})
+    """schemas returns available extraction schemas."""
+    result = await call_tool(mcp_client, session, "schemas", {})
     assert "total" in result
     assert "schemas" in result
     assert result["total"] >= 0

@@ -41,20 +41,20 @@ async def test_list_tools(mcp_client, session):
     expected = {
         "research",
         "search",
-        "scrape",
+        "fetch",
         "extract",
-        "list_schemas",
-        "map",
+        "schemas",
+        "discover",
         "crawl",
         "domains",
         "stats",
         "reset",
-        "clear_blacklist",
+        "unblock",
         "proxy_status",
-        "proxy_test",
-        "proxy_rotate",
-        "docs_list_sources",
-        "docs_fetch_docs",
+        "test_proxy",
+        "rotate_proxy",
+        "list_docs",
+        "read_docs",
     }
     missing = expected - tool_names
     assert not missing, f"Missing tools: {missing}"

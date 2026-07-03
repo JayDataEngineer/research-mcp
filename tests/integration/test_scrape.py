@@ -1,4 +1,4 @@
-"""Integration tests for scrape and extract tools."""
+"""Integration tests for fetch and extract tools."""
 
 import pytest
 from tests.integration.conftest import call_tool, call_tool_raw
@@ -8,7 +8,7 @@ from tests.integration.conftest import call_tool, call_tool_raw
 async def test_scrape_basic(mcp_client, session):
     """Basic scrape of a simple public URL succeeds."""
     result = await call_tool(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "https://example.com"}
     )
     assert result["success"] is True
@@ -23,7 +23,7 @@ async def test_scrape_basic(mcp_client, session):
 async def test_scrape_httpbin(mcp_client, session):
     """Scraping httpbin returns content."""
     result = await call_tool(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "https://httpbin.org/html"}
     )
     assert result["success"] is True
@@ -36,7 +36,7 @@ async def test_scrape_method_override_httpx(mcp_client, session):
     import time
     start = time.monotonic()
     result = await call_tool(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "https://example.com", "method": "httpx"}
     )
     elapsed = time.monotonic() - start
@@ -49,7 +49,7 @@ async def test_scrape_method_override_httpx(mcp_client, session):
 async def test_scrape_method_override_selenium(mcp_client, session):
     """Forcing selenium method works."""
     result = await call_tool(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "https://example.com", "method": "selenium"}
     )
     assert result["success"] is True
@@ -59,7 +59,7 @@ async def test_scrape_method_override_selenium(mcp_client, session):
 async def test_scrape_method_override_crawl4ai(mcp_client, session):
     """Forcing crawl4ai method works."""
     result = await call_tool(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "https://example.com", "method": "crawl4ai"}
     )
     assert result["success"] is True
@@ -69,7 +69,7 @@ async def test_scrape_method_override_crawl4ai(mcp_client, session):
 async def test_scrape_invalid_url_scheme(mcp_client, session):
     """Non-HTTP URL schemes are rejected."""
     data = await call_tool_raw(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "ftp://example.com"}
     )
     result = data["result"]
@@ -81,7 +81,7 @@ async def test_scrape_invalid_url_scheme(mcp_client, session):
 async def test_scrape_private_ip_blocked(mcp_client, session):
     """Private IPs are blocked for security."""
     data = await call_tool_raw(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "http://192.168.1.1"}
     )
     result = data["result"]
@@ -92,7 +92,7 @@ async def test_scrape_private_ip_blocked(mcp_client, session):
 async def test_scrape_localhost_blocked(mcp_client, session):
     """localhost is blocked for security."""
     data = await call_tool_raw(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "http://localhost:8000/health"}
     )
     result = data["result"]
@@ -103,7 +103,7 @@ async def test_scrape_localhost_blocked(mcp_client, session):
 async def test_scrape_nonexistent_domain(mcp_client, session):
     """Scraping a nonexistent domain returns a failure, not a crash."""
     result = await call_tool(
-        mcp_client, session, "scrape",
+        mcp_client, session, "fetch",
         {"url": "https://this-domain-definitely-does-not-exist-xyz123.com"}
     )
     assert "success" in result
@@ -135,7 +135,7 @@ async def test_scrape_concurrent(mcp_client):
 
     async def do_scrape(url: str):
         sid = await _init_session(mcp_client)
-        return await call_tool(mcp_client, sid, "scrape", {"url": url})
+        return await call_tool(mcp_client, sid, "fetch", {"url": url})
 
     results = await asyncio.gather(*[do_scrape(u) for u in urls])
     successes = sum(1 for r in results if r.get("success") is True)

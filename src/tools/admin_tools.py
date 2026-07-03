@@ -4,7 +4,7 @@ Administrative tools for managing the MCP server.
 - domains: List tracked domains with preferred methods
 - stats: View scrape statistics and metrics
 - reset: Clear all domain tracking data
-- clear_blacklist: Clear all blacklisted domains (unblock them)
+- unblock: Clear all blacklisted domains
 
 Note: Domain tracking uses PostgreSQL database shared with Celery workers.
 """
@@ -118,7 +118,7 @@ async def reset(ctx: Context | None = None) -> dict:
     }
 
 
-async def clear_blacklist(ctx: Context | None = None) -> dict:
+async def unblock(ctx: Context | None = None) -> dict:
     """Clear all blacklisted domains - unblock them immediately
 
     This resets the blacklist for ALL domains, allowing them to be
@@ -133,7 +133,7 @@ async def clear_blacklist(ctx: Context | None = None) -> dict:
 
     Note:
         This is a safer alternative to reset which removes
-        all learned data. clear_blacklist only resets the blacklist
+        all learned data. unblock only resets the blacklist
         while keeping learned scraping methods.
     """
     if ctx:

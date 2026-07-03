@@ -18,8 +18,8 @@ async def test_proxy_status(mcp_client, session):
 
 @pytest.mark.asyncio
 async def test_proxy_test(mcp_client, session):
-    """proxy_test runs connectivity check (may fail if proxy not configured)."""
-    data = await call_tool_raw(mcp_client, session, "proxy_test", {})
+    """test_proxy runs connectivity check (may fail if proxy not configured)."""
+    data = await call_tool_raw(mcp_client, session, "test_proxy", {})
     result = data["result"]
 
     # If proxy not configured, we get an error - that's acceptable
@@ -38,8 +38,8 @@ async def test_proxy_test(mcp_client, session):
 
 @pytest.mark.asyncio
 async def test_proxy_rotate_with_single_proxy(mcp_client, session):
-    """proxy_rotate with single proxy returns error."""
-    data = await call_tool_raw(mcp_client, session, "proxy_rotate", {})
+    """rotate_proxy with single proxy returns error."""
+    data = await call_tool_raw(mcp_client, session, "rotate_proxy", {})
     result = data["result"]
 
     if result.get("isError"):

@@ -2,8 +2,8 @@
 
 Administrative tools for monitoring and controlling proxy configuration.
 - proxy_status: View current proxy configuration and stats
-- proxy_test: Test proxy connectivity and report exit IP
-- proxy_rotate: Manually rotate to the next proxy in the list
+- test_proxy: Test proxy connectivity and report exit IP
+- rotate_proxy: Manually rotate to the next proxy in the list
 """
 
 import httpx
@@ -39,7 +39,7 @@ async def proxy_status(ctx: Context | None = None) -> dict:
     return stats
 
 
-async def proxy_test(ctx: Context | None = None) -> dict:
+async def test_proxy(ctx: Context | None = None) -> dict:
     """Test proxy connectivity by checking the exit IP
 
     Makes requests through the configured proxy to detect the external IP.
@@ -112,7 +112,7 @@ async def proxy_test(ctx: Context | None = None) -> dict:
     return results
 
 
-async def proxy_rotate(ctx: Context | None = None) -> dict:
+async def rotate_proxy(ctx: Context | None = None) -> dict:
     """Manually rotate to the next proxy in the rotation list
 
     Advances to the next proxy in the list (round-robin) regardless

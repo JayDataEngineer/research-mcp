@@ -3,25 +3,25 @@
 Web Research Tools:
 - research: Search + scrape top results in one call (recommended)
 - search: Search using multiple search engines
-- scrape: Scrape a URL and extract clean markdown
+- fetch: Scrape a URL and extract clean markdown
 - extract: Extract structured JSON data using pre-built schemas
-- list_schemas: List available extraction schemas
-- map: Discover URLs from sitemaps/Common Crawl
+- schemas: List available extraction schemas
+- discover: Discover URLs from sitemaps/Common Crawl
 - crawl: Deep crawl with BFS or Best-First strategy
-- process_html: Convert raw HTML to clean markdown
+- clean_html: Convert raw HTML to clean markdown
 
 Admin Tools:
 - domains: List tracked domains with preferred methods
 - stats: View scrape statistics and metrics
 - reset: Clear all domain tracking data
-- clear_blacklist: Clear all blacklisted domains
+- unblock: Clear all blacklisted domains
 
 Documentation:
-- docs_list_sources: List available documentation libraries
-- docs_fetch_docs: Fetch documentation from llms.txt sources
+- list_docs: List available documentation libraries
+- read_docs: Fetch documentation from llms.txt sources
 
 Proxy:
-- proxy_status, proxy_test, proxy_rotate
+- proxy_status, test_proxy, rotate_proxy
 """
 
 from __future__ import annotations
@@ -150,9 +150,9 @@ mcp = FastMCP(
         "Provides web research tools. "
         "Use 'research' to search and read top results in one call (recommended for most queries). "
         "Use 'search' for lightweight result lists (titles/snippets only). "
-        "Use 'scrape' to read a single page. "
+        "Use 'fetch' to read a single page. "
         "Use 'extract' for structured JSON extraction from pages. "
-        "Use 'map' to discover URLs from sitemaps. "
+        "Use 'discover' to discover URLs from sitemaps. "
         "Use 'crawl' for deep site crawling. "
         "The server learns which scraping method works best for each domain."
     ),
@@ -181,28 +181,28 @@ if redis_store:
                 "included_tools": [  # Explicit allowlist - cache only stable operations
                     "research",
                     "search",
-                    "scrape",
+                    "fetch",
                     "extract",
-                    "docs_fetch_docs",
-                    "docs_list_sources",
-                    "list_schemas",
+                    "read_docs",
+                    "list_docs",
+                    "schemas",
                     "domains",
-                    "clear_blacklist",
+                    "unblock",
                 ],
                 # Excluded from caching (fresh results each call):
-                # - map: Sitemaps change frequently, need fresh discovery
+                # - discover: Sitemaps change frequently, need fresh discovery
                 # - crawl: Dynamic link discovery, content changes
                 # - reset: Must always execute
             },
             list_tools_settings={"enabled": True, "ttl": SEARCH_CACHE_TTL},
         ))
         cached_tools = ", ".join([
-            "research", "search", "scrape", "extract",
-            "docs_fetch_docs", "docs_list_sources", "list_schemas", "domains", "clear_blacklist"
+            "research", "search", "fetch", "extract",
+            "read_docs", "list_docs", "schemas", "domains", "unblock"
         ])
         logger.info(f"Response caching enabled ({SCRAPE_CACHE_TTL}s)")
         logger.info(f"Cached tools: {cached_tools}")
-        logger.info(f"Uncached: map, crawl, reset (always fresh)")
+        logger.info(f"Uncached: discover, crawl, reset (always fresh)")
     except Exception as e:
         logger.warning(f"Failed to add caching middleware: {e}")
 
@@ -245,30 +245,30 @@ mcp.http_app = http_app_with_middleware
 # ========== TOOL REGISTRATION ==========
 
 # Import tool functions from modular structure
-from .tools.web_tools import research, search, scrape, extract, list_schemas, process_html
-from .tools.crawl_tools import map, crawl
-from .tools.docs_tools import docs_list_sources, docs_fetch_docs
-from .tools.admin_tools import domains, stats, reset, clear_blacklist
-from .tools.proxy_tools import proxy_status, proxy_test, proxy_rotate
+from .tools.web_tools import research, search, fetch, extract, schemas, clean_html
+from .tools.crawl_tools import discover, crawl
+from .tools.docs_tools import list_docs, read_docs
+from .tools.admin_tools import domains, stats, reset, unblock
+from .tools.proxy_tools import proxy_status, test_proxy, rotate_proxy
 
 # Register all tools with FastMCP
 mcp.add_tool(research)
 mcp.add_tool(search)
-mcp.add_tool(scrape)
+mcp.add_tool(fetch)
 mcp.add_tool(extract)
-mcp.add_tool(list_schemas)
-mcp.add_tool(map)
+mcp.add_tool(schemas)
+mcp.add_tool(discover)
 mcp.add_tool(crawl)
-mcp.add_tool(docs_list_sources)
-mcp.add_tool(docs_fetch_docs)
+mcp.add_tool(list_docs)
+mcp.add_tool(read_docs)
 mcp.add_tool(domains)
 mcp.add_tool(stats)
 mcp.add_tool(reset)
-mcp.add_tool(clear_blacklist)
+mcp.add_tool(unblock)
 mcp.add_tool(proxy_status)
-mcp.add_tool(proxy_test)
-mcp.add_tool(proxy_rotate)
-mcp.add_tool(process_html)
+mcp.add_tool(test_proxy)
+mcp.add_tool(rotate_proxy)
+mcp.add_tool(clean_html)
 
 
 # ========== ASGI APP (for uvicorn --workers) ==========
@@ -288,10 +288,10 @@ if __name__ == "__main__":
     logger.info(f"Tailnet:       https://<node>.ts.net:10000/research/mcp  (via tailscale serve)")
     logger.info(f"Session state: Redis @ {REDIS_HOST}:{REDIS_PORT}")
     logger.info(f"Caching: enabled (search: {SEARCH_CACHE_TTL}s, scrape: {SCRAPE_CACHE_TTL}s)")
-    logger.info(f"Web tools: research, search, scrape, extract, list_schemas, map, crawl")
-    logger.info(f"Admin tools: domains, stats, reset, clear_blacklist")
-    logger.info(f"Docs tools: docs_list_sources, docs_fetch_docs")
-    logger.info(f"Proxy tools: proxy_status, proxy_test, proxy_rotate")
+    logger.info(f"Web tools: research, search, fetch, extract, schemas, discover, crawl")
+    logger.info(f"Admin tools: domains, stats, reset, unblock")
+    logger.info(f"Docs tools: list_docs, read_docs")
+    logger.info(f"Proxy tools: proxy_status, test_proxy, rotate_proxy")
 
     # Log proxy status
     from .utils.proxy import get_proxy_manager

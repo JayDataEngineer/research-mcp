@@ -3,9 +3,9 @@
 Tools for searching, scraping, and researching the web.
 - research: Search + scrape top results in one call (recommended)
 - search: Search using multiple search engines
-- scrape: Scrape a URL and extract clean markdown
+- fetch: Scrape a URL and extract clean markdown
 - extract: Extract structured JSON data using pre-built schemas
-- list_schemas: List available extraction schemas
+- schemas: List available extraction schemas
 """
 
 import asyncio
@@ -127,7 +127,7 @@ async def research(
     actual page content — not just snippets.
 
     Returns results with title, url, snippet, and page content (capped at ~5K chars per result).
-    Use 'scrape' on a specific URL if you need the full page content.
+    Use 'fetch' on a specific URL if you need the full page content.
 
     Args:
         query: What to search for
@@ -273,7 +273,7 @@ async def search(
     }
 
 
-async def scrape(
+async def fetch(
     url: Annotated[str, Field(description="URL to scrape")],
     method: Annotated[Literal["httpx", "crawl4ai", "selenium", "pdf"] | None, Field(
         description="Force specific scraping method"
@@ -456,7 +456,7 @@ async def extract(
     }
 
 
-async def list_schemas(ctx: Context | None = None) -> dict:
+async def schemas(ctx: Context | None = None) -> dict:
     """List all available structured extraction schemas
 
     Returns information about pre-built schemas available for
@@ -475,7 +475,7 @@ async def list_schemas(ctx: Context | None = None) -> dict:
     }
 
 
-async def process_html(
+async def clean_html(
     html: Annotated[str, Field(
         description="Raw HTML content to clean and convert to markdown"
     )],
@@ -490,7 +490,7 @@ async def process_html(
     """Process raw HTML content and convert to clean markdown.
 
     For AI browser agents: send the page HTML from your browser and get back
-    clean, LLM-ready markdown. Uses the same cleaning pipeline as the scrape
+    clean, LLM-ready markdown. Uses the same cleaning pipeline as the fetch
     tool (noise removal, content extraction, 50K char cap).
 
     Args:

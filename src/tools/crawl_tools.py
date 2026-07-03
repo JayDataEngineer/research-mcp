@@ -1,7 +1,7 @@
 """Crawling Tools
 
 Tools for discovering URLs and deep crawling websites.
-- map: Discover URLs from sitemaps/Common Crawl
+- discover: Discover URLs from sitemaps/Common Crawl
 - crawl: Deep crawl with BFS or Best-First strategy
 """
 
@@ -90,7 +90,7 @@ def _is_url_blacklisted(url: str) -> bool:
         return True
 
 
-async def map(
+async def discover(
     domain: Annotated[str, Field(
         description="Domain to map (e.g., 'example.com' or 'https://example.com')",
         min_length=3
@@ -121,9 +121,9 @@ async def map(
     Use this BEFORE scraping to understand a site's structure.
 
     WORKFLOW:
-    1. Call map_domain to discover URLs (e.g., all blog posts)
+    1. Call discover to discover URLs (e.g., all blog posts)
     2. Filter URLs by pattern, metadata, or relevance score
-    3. Call scrape_url or crawl_site on selected URLs
+    3. Call fetch or crawl on selected URLs
 
     USE CASES:
     - Find all documentation pages: pattern="*/docs/*"
@@ -230,11 +230,11 @@ async def crawl(
     """Deep crawl a site following links (BFS or Best-First strategy)
 
     This is a DEEP CRAWL tool - it discovers and crawls pages by following links.
-    Use this AFTER map_domain when you need actual page content.
+    Use this AFTER discover when you need actual page content.
 
     WORKFLOW:
-    1. Call map_domain to discover URLs (optional but recommended)
-    2. Call crawl_site with starting URL to crawl linked pages
+    1. Call discover to discover URLs (optional but recommended)
+    2. Call crawl with starting URL to crawl linked pages
     3. Review crawled pages and extract specific URLs of interest
 
     STRATEGIES:
@@ -381,7 +381,7 @@ async def crawl(
                 if rate_limited > 0:
                     error_msg += f"rate limiting detected. "
 
-                error_msg += "Try scrape_url instead which has SeleniumBase fallback."
+                error_msg += "Try fetch instead which has SeleniumBase fallback."
                 if ctx:
                     await ctx.info(error_msg)
 
