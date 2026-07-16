@@ -275,7 +275,7 @@ async def search(
 
 async def fetch(
     url: Annotated[str, Field(description="URL to scrape")],
-    method: Annotated[Literal["httpx", "crawl4ai", "selenium", "pdf"] | None, Field(
+    method: Annotated[Literal["httpx", "crawl4ai", "selenium", "pdf", "image", "file"] | None, Field(
         description="Force specific scraping method"
     )] = None,
     css_selector: Annotated[str | None, Field(
@@ -286,19 +286,28 @@ async def fetch(
     )] = False,
     ctx: Context | None = None
 ) -> dict:
-    """Scrape a URL and extract clean markdown content
+    """Fetch a URL and extract clean markdown content
 
-    The server learns which scraping method works best per domain and
-    automatically uses it on future requests.
+    Works on web pages (HTML → markdown), PDFs (→ text), AND arbitrary web
+    files like images. For image URLs the response includes the image as a
+    native image content block (so vision-capable models can see it) plus
+    metadata (content-type, dimensions, size). For other binary files
+    (archives, office docs, media) it returns metadata and a sha256.
+
+    The server auto-detects file types by URL extension and Content-Type and
+    learns which scraping method works best per domain for HTML pages.
 
     Args:
-        url: URL to scrape (must be a valid HTTP/HTTPS URL)
-        method: Force specific scraping method (crawl4ai, selenium, pdf)
+        url: URL to fetch (must be a valid HTTP/HTTPS URL)
+        method: Force a specific method. Use "image" or "file" to treat the
+            URL as a binary download regardless of extension.
         css_selector: Optional CSS selector for targeted content extraction
         text_only: Disable images for faster loading (Crawl4AI only)
 
     Returns:
-        Dictionary with url, title, content (markdown), success, and error
+        Dictionary with url, title, content (markdown), success, and error.
+        For images: also content_type, size_bytes, width, height.
+        For binary files: also content_type, size_bytes, sha256.
 
     Security:
         Internal and private IPs are blocked (localhost, 127.0.0.1, 10.*,
@@ -340,18 +349,85 @@ async def fetch(
     try:
         result = await scrape_svc.scrape(request)
 
+        # File / image results carry metadata that the caller wants at the
+        # top level (not buried in metadata). Surface the relevant fields.
+        md = result.metadata or {}
+        is_image = result.method_used == ScrapingMethod.IMAGE
+        is_file = result.method_used == ScrapingMethod.FILE
+
+        if not result.success:
+            response = {
+                "url": result.url,
+                "title": result.title,
+                "content": result.content,
+                "success": False,
+            }
+            if result.error:
+                response["error"] = result.error
+            if ctx:
+                await ctx.error(f"Scrape failed: {result.error}")
+            return response
+
+        if is_image:
+            if ctx:
+                await ctx.info(
+                    f"Fetched image: {md.get('content_type', 'unknown')}, "
+                    f"{md.get('width')}x{md.get('height')}"
+                )
+            image_meta = {
+                "url": result.url,
+                "title": result.title,
+                "content": result.content,
+                "success": True,
+                "content_type": md.get("content_type"),
+                "size_bytes": md.get("size_bytes"),
+                "width": md.get("width"),
+                "height": md.get("height"),
+            }
+            # Return the image as a native MCP ImageContent block so vision
+            # models can see it token-efficiently. We build a ToolResult
+            # directly so the metadata travels as structured content and the
+            # image as a dedicated content block — no base64 string flooding
+            # the text context.
+            b64 = md.get("image_base64")
+            if b64:
+                import json as _json
+                from fastmcp.tools import ToolResult
+                from mcp.types import TextContent, ImageContent
+
+                mime = md.get("content_type") or "image/png"
+                return ToolResult(
+                    content=[
+                        TextContent(type="text", text=_json.dumps(image_meta)),
+                        ImageContent(type="image", data=b64, mimeType=mime),
+                    ],
+                    structured_content=image_meta,
+                )
+            # Image too large to embed — metadata only
+            image_meta["content"] = (
+                (result.content or "") +
+                "\n\n*Image too large to embed inline; use the URL to view it.*"
+            )
+            return image_meta
+
+        if is_file:
+            return {
+                "url": result.url,
+                "title": result.title,
+                "content": result.content,
+                "success": True,
+                "content_type": md.get("content_type"),
+                "size_bytes": md.get("size_bytes"),
+                "sha256": md.get("sha256"),
+            }
+
+        # Default: HTML / PDF / Reddit — unchanged shape
         response = {
             "url": result.url,
             "title": result.title,
             "content": result.content,
             "success": result.success,
         }
-
-        if not result.success and result.error:
-            response["error"] = result.error
-            if ctx:
-                await ctx.error(f"Scrape failed: {result.error}")
-
         return response
     except Exception as e:
         import traceback

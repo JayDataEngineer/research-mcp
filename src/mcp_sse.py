@@ -150,7 +150,7 @@ mcp = FastMCP(
         "Provides web research tools. "
         "Use 'research' to search and read top results in one call (recommended for most queries). "
         "Use 'search' for lightweight result lists (titles/snippets only). "
-        "Use 'fetch' to read a single page. "
+        "Use 'fetch' to read a single page, PDF, or image/file URL. "
         "Use 'extract' for structured JSON extraction from pages. "
         "Use 'discover' to discover URLs from sitemaps. "
         "Use 'crawl' for deep site crawling. "

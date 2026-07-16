@@ -79,7 +79,7 @@ curl -X POST http://localhost:41827/mcp \
 |------|-------------|
 | `research(query, max_results=3, depth="quick")` | Search + scrape top results in one call (fastest path to content) |
 | `search(query, top_k=5, pages=1, time_filter=null)` | Search engines → titles, URLs, snippets |
-| `scrape(url, method=null, css_selector=null, text_only=false)` | Single page → clean Markdown |
+| `fetch(url, method=null, css_selector=null, text_only=false)` | Page → Markdown · PDF → text · **image → metadata + native image content** · binary file → metadata + sha256 |
 | `extract(url, schema_type, custom_selector=null)` | Structured JSON via pre-built schemas |
 | `process_html(html, url="")` | Clean raw HTML to Markdown (no fetch) |
 | `list_schemas()` | List available extraction schemas |

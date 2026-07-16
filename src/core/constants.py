@@ -11,6 +11,13 @@ REDDIT_MAX_POSTS = 20
 MIN_CONTENT_LENGTH = 100
 MAX_CONTENT_LENGTH = 50000  # Cap scrape output to ~50K chars
 
+# File / binary download limits
+# Hard cap on any single non-HTML download — refuses larger files outright.
+MAX_FILE_DOWNLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+# Images below this size are embedded as native MCP ImageContent so vision
+# LLMs can see them token-efficiently. Larger images return metadata only.
+MAX_IMAGE_CONTENT_BYTES = 2 * 1024 * 1024  # 2 MB
+
 # Celery configuration
 CELERY_TASK_TIMEOUT_SECONDS = 300
 CELERY_TASK_SOFT_TIMEOUT_SECONDS = 270

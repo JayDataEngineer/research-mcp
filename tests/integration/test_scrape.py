@@ -140,3 +140,48 @@ async def test_scrape_concurrent(mcp_client):
     results = await asyncio.gather(*[do_scrape(u) for u in urls])
     successes = sum(1 for r in results if r.get("success") is True)
     assert successes >= 1, "At least one concurrent scrape should succeed"
+
+
+@pytest.mark.asyncio
+async def test_fetch_image_url(mcp_client, session):
+    """Fetching an image URL returns image metadata, not a 'Not HTML' error."""
+    result = await call_tool(
+        mcp_client, session, "fetch",
+        {"url": "https://httpbin.org/image/png"},
+    )
+    assert result["success"] is True
+    assert result["url"] == "https://httpbin.org/image/png"
+    # Image results surface file metadata at the top level
+    assert result.get("content_type", "").startswith("image/")
+    assert isinstance(result.get("size_bytes"), int) and result["size_bytes"] > 0
+    assert "width" in result
+    assert "height" in result
+
+
+@pytest.mark.asyncio
+async def test_fetch_image_returns_native_image_content(mcp_client):
+    """Image fetch returns an MCP image content block alongside the metadata text."""
+    from tests.integration.conftest import _init_session
+
+    sid = await _init_session(mcp_client)
+    data = await call_tool_raw(
+        mcp_client, sid, "fetch",
+        {"url": "https://httpbin.org/image/png"},
+    )
+    content_blocks = data["result"]["content"]
+    types = [b.get("type") for b in content_blocks]
+    # First block is the metadata text, second is the native image content
+    assert "text" in types
+    assert "image" in types
+
+
+@pytest.mark.asyncio
+async def test_fetch_force_image_method(mcp_client, session):
+    """Forcing method='image' works on a URL without an image extension."""
+    result = await call_tool(
+        mcp_client, session, "fetch",
+        {"url": "https://httpbin.org/image/png", "method": "image"},
+    )
+    assert result["success"] is True
+    assert result.get("content_type", "").startswith("image/")
+

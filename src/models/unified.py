@@ -12,6 +12,8 @@ class ScrapingMethod(str, Enum):
     SELENIUM = "selenium"
     REDDIT_API = "reddit_api"
     PDF = "pdf"
+    IMAGE = "image"
+    FILE = "file"
     BLACKLISTED = "blacklisted"
 
 

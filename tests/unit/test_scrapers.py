@@ -8,6 +8,15 @@ from src.scrapers.base import (
     detect_blocking,
     normalize_reddit_url,
     scrape_httpx,
+    _url_extension,
+    _is_image_url,
+    _is_binary_file_url,
+    _looks_like_file_url,
+    _is_image_content_type,
+    _is_binary_content_type,
+    _filename_from_url,
+    _process_downloaded_file,
+    scrape_file,
 )
 
 
@@ -306,3 +315,266 @@ Wir überprüfen Ihren Browser bevor wir Ihnen Zugang gewähren. Bitte warten Si
             result = await scrape_httpx("https://example.com", _make_mock_cleaner(long_cleaner_out))
 
         assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_image_content_type_delegated_to_file_handler(self):
+        """httpx delegates image responses to the file handler instead of erroring."""
+        from src.scrapers.base import _process_downloaded_file
+
+        # Minimal valid 1x1 PNG
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00"
+            b"\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = png_bytes
+        mock_resp.headers = {"content-type": "image/png"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        with patch("src.utils.proxy.create_proxied_client", return_value=mock_client):
+            result = await scrape_httpx(
+                "https://example.com/photo.png", _make_mock_cleaner()
+            )
+
+        assert result["success"] is True
+        assert result["method_used"] == "image"
+        assert result["metadata"]["content_type"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_json_content_type_still_rejected(self):
+        """application/json is NOT a binary file — keep the 'Not HTML' behaviour."""
+        mock_resp = _make_mock_response("<data/>", content_type="application/json")
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        with patch("src.utils.proxy.create_proxied_client", return_value=mock_client):
+            result = await scrape_httpx(
+                "https://example.com/api", _make_mock_cleaner()
+            )
+
+        assert result["success"] is False
+        assert "Not HTML" in result.get("error", "")
+
+
+class TestFileUrlDetection:
+    """Tests for URL extension and content-type detection helpers."""
+
+    def test_url_extension_basic(self):
+        assert _url_extension("https://x.com/a.png") == ".png"
+        assert _url_extension("https://x.com/a.JPEG") == ".jpeg"
+        assert _url_extension("https://x.com/a.tar.gz") == ".gz"
+
+    def test_url_extension_ignores_query_and_fragment(self):
+        assert _url_extension("https://x.com/img.jpg?w=100&h=200") == ".jpg"
+        assert _url_extension("https://x.com/img.png#section") == ".png"
+
+    def test_url_extension_none(self):
+        assert _url_extension("https://x.com/no-ext") == ""
+        assert _url_extension("https://x.com/path/") == ""
+        assert _url_extension("https://x.com/") == ""
+
+    def test_is_image_url(self):
+        assert _is_image_url("https://x.com/a.png") is True
+        assert _is_image_url("https://x.com/a.JPG") is True
+        assert _is_image_url("https://x.com/a.svg") is True
+        assert _is_image_url("https://x.com/a.html") is False
+        assert _is_image_url("https://x.com/a.zip") is False
+
+    def test_is_binary_file_url(self):
+        assert _is_binary_file_url("https://x.com/a.zip") is True
+        assert _is_binary_file_url("https://x.com/a.mp4") is True
+        assert _is_binary_file_url("https://x.com/a.png") is False
+        assert _is_binary_file_url("https://x.com/a.html") is False
+
+    def test_looks_like_file_url(self):
+        assert _looks_like_file_url("https://x.com/a.png") is True
+        assert _looks_like_file_url("https://x.com/a.zip") is True
+        assert _looks_like_file_url("https://x.com/page") is False
+
+    def test_filename_from_url(self):
+        assert _filename_from_url("https://x.com/path/photo.png") == "photo.png"
+        assert _filename_from_url("https://x.com/data.zip?token=abc") == "data.zip"
+        assert _filename_from_url("https://x.com/") == ""
+
+    def test_is_image_content_type(self):
+        assert _is_image_content_type("image/png") is True
+        assert _is_image_content_type("image/svg+xml") is True
+        assert _is_image_content_type("text/html") is False
+
+    def test_is_binary_content_type(self):
+        assert _is_binary_content_type("application/zip") is True
+        assert _is_binary_content_type("application/octet-stream") is True
+        assert _is_binary_content_type("video/mp4") is True
+        # Text-like types are NOT treated as downloadable binaries
+        assert _is_binary_content_type("application/json") is False
+        assert _is_binary_content_type("text/plain") is False
+        assert _is_binary_content_type("text/html") is False
+        assert _is_binary_content_type("") is False
+
+
+class TestProcessDownloadedFile:
+    """Tests for _process_downloaded_file — pure bytes → response dict."""
+
+    # Minimal valid 1x1 PNG (red pixel)
+    PNG_BYTES = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00"
+        b"\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    def test_image_returns_success_with_metadata(self):
+        result = _process_downloaded_file(
+            "https://x.com/test.png", self.PNG_BYTES, "image/png"
+        )
+        assert result["success"] is True
+        assert result["method_used"] == "image"
+        assert result["url"] == "https://x.com/test.png"
+        md = result["metadata"]
+        assert md["content_type"] == "image/png"
+        assert md["size_bytes"] == len(self.PNG_BYTES)
+        assert md["filename"] == "test.png"
+        assert len(md["sha256"]) == 64
+        assert md["width"] == 1
+        assert md["height"] == 1
+        assert md["image_format"] == "png"
+        assert md["image_base64"]  # small enough to embed
+        assert "![test.png]" in result["content"]
+
+    def test_image_base64_round_trips(self):
+        import base64
+        result = _process_downloaded_file(
+            "https://x.com/t.png", self.PNG_BYTES, "image/png"
+        )
+        decoded = base64.b64decode(result["metadata"]["image_base64"])
+        assert decoded == self.PNG_BYTES
+
+    def test_svg_image_no_dimensions_no_base64(self):
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>'
+        result = _process_downloaded_file(
+            "https://x.com/d.svg", svg, "image/svg+xml"
+        )
+        assert result["success"] is True
+        assert result["method_used"] == "image"
+        # SVG is vector — no pixel dims and no base64 embedding
+        assert result["metadata"].get("width") is None
+        assert result["metadata"].get("image_base64") is None
+
+    def test_binary_file_metadata_only(self):
+        data = b"PK\x03\x04" + b"\x00" * 100
+        result = _process_downloaded_file(
+            "https://x.com/a.zip", data, "application/zip"
+        )
+        assert result["success"] is True
+        assert result["method_used"] == "file"
+        assert len(result["metadata"]["sha256"]) == 64
+        # No image data for generic binaries
+        assert "image_base64" not in result["metadata"]
+        assert "Binary file" in result["content"]
+
+    def test_oversized_file_rejected(self):
+        from src.core.constants import MAX_FILE_DOWNLOAD_BYTES
+        big = b"\x00" * (MAX_FILE_DOWNLOAD_BYTES + 1)
+        result = _process_downloaded_file(
+            "https://x.com/big.zip", big, "application/zip"
+        )
+        assert result["success"] is False
+        assert "too large" in result["error"].lower()
+
+    def test_forced_file_mode_on_image(self):
+        """Forcing mode='file' treats an image as a generic binary (no base64)."""
+        result = _process_downloaded_file(
+            "https://x.com/t.png", self.PNG_BYTES, "image/png", mode="file"
+        )
+        assert result["method_used"] == "file"
+        assert "image_base64" not in result["metadata"]
+
+
+class TestScrapeFile:
+    """Tests for scrape_file — the downloading entry point."""
+
+    @pytest.mark.asyncio
+    async def test_downloads_and_processes_image(self):
+        """scrape_file fetches the URL and returns image metadata."""
+        png = TestProcessDownloadedFile.PNG_BYTES
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = png
+        mock_resp.headers = {"content-type": "image/png"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        with patch("src.utils.proxy.create_proxied_client", return_value=mock_client):
+            result = await scrape_file("https://x.com/a.png")
+
+        assert result["success"] is True
+        assert result["method_used"] == "image"
+        assert result["metadata"]["width"] == 1
+
+    @pytest.mark.asyncio
+    async def test_octet_stream_promoted_via_extension(self):
+        """Generic octet-stream is promoted to image/png when URL ends in .png."""
+        png = TestProcessDownloadedFile.PNG_BYTES
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = png
+        mock_resp.headers = {"content-type": "application/octet-stream"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        with patch("src.utils.proxy.create_proxied_client", return_value=mock_client):
+            result = await scrape_file("https://x.com/a.png")
+
+        assert result["success"] is True
+        assert result["method_used"] == "image"
+        assert result["metadata"]["content_type"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_http_error_returns_failure(self):
+        import httpx as _httpx
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        error_resp = MagicMock()
+        error_resp.status_code = 404
+        http_err = _httpx.HTTPStatusError("404", request=MagicMock(), response=error_resp)
+        mock_client.get = AsyncMock(side_effect=http_err)
+
+        with patch("src.utils.proxy.create_proxied_client", return_value=mock_client):
+            result = await scrape_file("https://x.com/missing.png")
+
+        assert result["success"] is False
+        assert "404" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_failure(self):
+        import httpx as _httpx
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=_httpx.TimeoutException("slow"))
+
+        with patch("src.utils.proxy.create_proxied_client", return_value=mock_client):
+            result = await scrape_file("https://x.com/slow.png")
+
+        assert result["success"] is False
+        assert "timeout" in result["error"].lower()

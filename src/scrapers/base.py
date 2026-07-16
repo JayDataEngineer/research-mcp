@@ -3,7 +3,10 @@
 from typing import Callable, Any
 from loguru import logger
 from datetime import datetime
+import base64
+import hashlib
 import re
+from urllib.parse import urlparse
 
 from ..core.constants import (
     CRAWL4AI_WORD_COUNT_THRESHOLD,
@@ -14,6 +17,8 @@ from ..core.constants import (
     CRAWL4AI_RETRY_COUNT,
     SELENIUM_RETRY_COUNT,
     CRAWL4AI_MAX_CONCURRENT,
+    MAX_FILE_DOWNLOAD_BYTES,
+    MAX_IMAGE_CONTENT_BYTES,
 )
 from ..utils import extract_domain
 
@@ -65,6 +70,121 @@ def _rotate_proxy():
     if manager.proxy_count > 1:
         new_proxy = manager.rotate()
         logger.info(f"Rotated proxy after IP block -> {new_proxy}")
+
+
+# ========== File / image detection ==========
+
+# Extensions that signal a non-HTML resource. Checked against the URL path
+# (ignoring query/fragment) so dynamic URLs fall through to content-type
+# detection in scrape_httpx instead.
+IMAGE_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
+    ".tif", ".tiff", ".ico", ".svg",
+}
+BINARY_EXTENSIONS = {
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".rar", ".7z",
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".exe", ".msi", ".dmg", ".deb", ".rpm", ".apk", ".jar",
+    ".mp3", ".mp4", ".m4a", ".avi", ".mov", ".mkv", ".webm", ".wav", ".flac", ".ogg",
+    ".bin", ".iso", ".img",
+}
+
+# Content-type prefixes that mean "downloadable binary file" (not text/HTML).
+# Text-like types (application/json, text/plain, application/xml) are excluded
+# so the existing "Not HTML" behaviour for those is preserved.
+_BINARY_CONTENT_TYPE_PREFIXES = (
+    "image/", "audio/", "video/",
+    "application/octet-stream", "application/zip", "application/x-tar",
+    "application/gzip", "application/x-gzip", "application/x-bzip2",
+    "application/x-xz", "application/x-7z-compressed", "application/x-rar",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument",
+    "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+    "application/x-msdownload", "application/x-shockwave-flash",
+)
+
+
+def _url_extension(url: str) -> str:
+    """Return the lowercase file extension of the URL path (ignoring query/fragment).
+
+    Returns "" if there's no recognizable extension.
+    """
+    try:
+        path = urlparse(url).path
+    except Exception:
+        path = url
+    dot = path.rfind(".")
+    if dot == -1:
+        return ""
+    ext = path[dot:].lower()
+    # Reject extensions with a directory separator after the dot (not a real ext)
+    if "/" in ext:
+        return ""
+    return ext
+
+
+def _is_image_url(url: str) -> bool:
+    """True if the URL path ends with a known image extension."""
+    return _url_extension(url) in IMAGE_EXTENSIONS
+
+
+def _is_binary_file_url(url: str) -> bool:
+    """True if the URL path ends with a known binary-file extension."""
+    return _url_extension(url) in BINARY_EXTENSIONS
+
+
+def _looks_like_file_url(url: str) -> bool:
+    """True if the URL path suggests a non-HTML file (image or binary)."""
+    return _is_image_url(url) or _is_binary_file_url(url)
+
+
+def _is_image_content_type(content_type: str) -> bool:
+    """True if a Content-Type header indicates an image. SVG is vector, not pixel,
+    so its base64 can't be decoded by Pillow — we still surface it but skip dims."""
+    return content_type.startswith("image/")
+
+
+def _is_binary_content_type(content_type: str) -> bool:
+    """True if a Content-Type header indicates a downloadable binary file."""
+    if not content_type:
+        return False
+    return content_type.startswith(_BINARY_CONTENT_TYPE_PREFIXES)
+
+
+def _filename_from_url(url: str) -> str:
+    """Best-effort filename extraction from a URL path."""
+    try:
+        path = urlparse(url).path
+    except Exception:
+        path = url
+    name = path.rstrip("/").rsplit("/", 1)[-1]
+    return name if name else ""
+
+
+def _human_size(n: int) -> str:
+    """Render a byte count as a short human-readable string."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} {unit}"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
+def _get_image_dimensions(data: bytes, content_type: str):
+    """Return (width, height) for an image, or (None, None) if undeterminable.
+
+    Uses Pillow (PIL). SVG has no pixel dimensions and is reported as None.
+    """
+    if "svg" in content_type:
+        return None, None
+    try:
+        from PIL import Image as _PILImage
+        import io
+        with _PILImage.open(io.BytesIO(data)) as img:
+            return img.size  # (width, height)
+    except Exception as e:
+        logger.debug(f"Could not read image dimensions: {e}")
+        return None, None
 
 
 def is_security_checkpoint(title: str, content: str, url: str = None) -> bool:
@@ -291,8 +411,20 @@ async def scrape_httpx(url: str, cleaner, css_selector: str = None) -> dict:
             response = await client.get(url, headers=html_headers, follow_redirects=True)
             response.raise_for_status()
 
-            content_type = response.headers.get("content-type", "")
-            if "text/html" not in content_type and "application/xhtml" not in content_type:
+            content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+
+            # Route non-HTML responses to the file handler. This catches dynamic
+            # image/binary URLs (no file extension) without an extra request —
+            # we already have the bytes. Text-like types (JSON/XML/plain) still
+            # fall through to the "Not HTML" error below.
+            if _is_image_content_type(content_type):
+                logger.info(f"httpx got image content-type for {url}: {content_type}")
+                return _process_downloaded_file(url, response.content, content_type, mode="image")
+            if _is_binary_content_type(content_type):
+                logger.info(f"httpx got binary content-type for {url}: {content_type}")
+                return _process_downloaded_file(url, response.content, content_type, mode="file")
+
+            if content_type and "text/html" not in content_type and "application/xhtml" not in content_type:
                 return build_error_response(url, "httpx", f"Not HTML: {content_type}")
 
             html = response.text
@@ -709,6 +841,141 @@ async def scrape_pdf(url: str, cleaner=None) -> dict:
         return build_error_response(url, "pdf", str(e))
 
 
+def _process_downloaded_file(
+    url: str,
+    data: bytes,
+    content_type: str,
+    mode: str | None = None,
+) -> dict:
+    """Build a scrape response dict from already-downloaded file bytes.
+
+    Args:
+        url: Source URL (for metadata + filename inference).
+        data: Raw response bytes.
+        content_type: Normalized Content-Type (e.g. "image/png").
+        mode: "image" forces image handling, "file" forces generic binary.
+            None auto-detects from content_type.
+
+    For images, base64 data is embedded in metadata["image_base64"] (when under
+    MAX_IMAGE_CONTENT_BYTES) so the tool layer can return a native MCP ImageContent.
+    """
+    size = len(data)
+    if size > MAX_FILE_DOWNLOAD_BYTES:
+        return build_error_response(
+            url, "file",
+            f"File too large: {size} bytes exceeds {MAX_FILE_DOWNLOAD_BYTES} byte limit",
+        )
+
+    filename = _filename_from_url(url)
+    sha256 = hashlib.sha256(data).hexdigest()
+    is_image = mode == "image" or (mode is None and _is_image_content_type(content_type))
+
+    metadata = {
+        "content_type": content_type,
+        "size_bytes": size,
+        "filename": filename,
+        "sha256": sha256,
+        "fetched_at": datetime.now().isoformat(),
+    }
+
+    if is_image:
+        width, height = _get_image_dimensions(data, content_type)
+        if width is not None:
+            metadata["width"] = width
+            metadata["height"] = height
+
+        # Embed base64 only for reasonably-sized images so vision LLMs can see
+        # them without bloating context. Larger images return metadata only.
+        if size <= MAX_IMAGE_CONTENT_BYTES and "svg" not in content_type:
+            metadata["image_base64"] = base64.b64encode(data).decode("ascii")
+            # Pillow / Image() expect the format name without the "image/" prefix.
+            metadata["image_format"] = content_type.split("/", 1)[-1].split("+")[0]
+        else:
+            metadata["image_base64"] = None
+
+        dims = f"{width}×{height}" if width else "unknown size"
+        title = filename or f"image ({dims})"
+        content = (
+            f"![{title}]({url})\n\n"
+            f"*Image — {content_type}, {dims}, {_human_size(size)}*"
+        )
+        method = "image"
+    else:
+        title = filename or "file"
+        content = f"*Binary file — {content_type}, {_human_size(size)}*"
+        method = "file"
+
+    return build_scrape_response(
+        success=True,
+        url=url,
+        method=method,
+        title=title,
+        content=content,
+        metadata=metadata,
+    )
+
+
+async def scrape_file(url: str, mode: str | None = None) -> dict:
+    """Download a non-HTML file (image or binary) and return metadata.
+
+    Uses the proxy-aware httpx client. The Content-Type header determines
+    whether the file is treated as an image (dimensions + base64 embedding)
+    or a generic binary file (metadata + sha256 only).
+
+    Args:
+        url: URL of the file to download.
+        mode: "image" or "file" to force a handling mode, None to auto-detect.
+
+    Returns dict with keys: success, url, domain, method_used, title, content,
+    metadata, error.
+    """
+    import httpx
+    from ..utils.proxy import create_proxied_client
+
+    # Accept any content type — we're downloading a file, not a page.
+    file_headers = {
+        "User-Agent": DEFAULT_HEADERS["User-Agent"],
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    try:
+        logger.info(f"Downloading file: {url}")
+        async with create_proxied_client(timeout=60.0, target_url=url) as client:
+            response = await client.get(url, headers=file_headers, follow_redirects=True)
+            response.raise_for_status()
+
+            content_type = (
+                response.headers.get("content-type", "application/octet-stream")
+                .split(";")[0].strip().lower()
+            )
+            data = response.content
+
+        # If the caller didn't force a mode, prefer the URL extension for images
+        # when the server sends a generic octet-stream Content-Type (common for
+        # CDN-hosted images with no MIME configured).
+        if mode is None and content_type == "application/octet-stream" and _is_image_url(url):
+            ext = _url_extension(url).lstrip(".")
+            content_type = {
+                "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp",
+                "tif": "image/tiff", "tiff": "image/tiff", "ico": "image/x-icon",
+                "svg": "image/svg+xml",
+            }.get(ext, content_type)
+
+        return _process_downloaded_file(url, data, content_type, mode=mode)
+
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"HTTP error downloading file {url}: {e.response.status_code}")
+        return build_error_response(url, "file", f"HTTP {e.response.status_code}")
+    except httpx.TimeoutException:
+        logger.warning(f"Timeout downloading file {url}")
+        return build_error_response(url, "file", "Download timeout")
+    except Exception as e:
+        logger.warning(f"File download error for {url}: {e}")
+        return build_error_response(url, "file", str(e))
+
+
 async def scrape_playwright(url: str, cleaner, css_selector: str = None,
                             text_only: bool = False) -> dict:
     """Raw Playwright scraper — bypasses Crawl4AI's launch wrapper.
@@ -861,6 +1128,21 @@ async def scrape_with_fallback(
             await record_metric(True, "reddit_api", content=result.get("content"))
         else:
             await record_metric(False, "reddit_api", error=result.get("error"))
+        return result
+
+    # Special handler: image / binary files detected by URL extension.
+    # Avoids spinning up a browser for static file URLs. Dynamic URLs without
+    # a recognisable extension are still caught by content-type detection in
+    # scrape_httpx below.
+    if _looks_like_file_url(url):
+        mode = "image" if _is_image_url(url) else "file"
+        logger.info(f"Using {mode} scraper for {url}")
+        result = await scrape_file(url, mode=mode)
+        if result["success"]:
+            await db.record_success(domain, mode)
+            await record_metric(True, mode, content=result.get("content"))
+        else:
+            await record_metric(False, mode, error=result.get("error"))
         return result
 
     # Force method? → Use it directly without retries
@@ -1109,6 +1391,8 @@ async def _scrape_with_method(url: str, method: str, cleaner, css_selector: str 
         return await scrape_reddit(url, cleaner)
     elif method == "pdf":
         return await scrape_pdf(url, cleaner)
+    elif method in ("image", "file"):
+        return await scrape_file(url, mode=method)
     else:
         return build_error_response(url, method, "Unknown method")
 
