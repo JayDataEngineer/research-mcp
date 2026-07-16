@@ -104,6 +104,10 @@ services:
       MCP_PROXY_URL: ${MCP_PROXY_URL:-}
       MCP_PROXY_URLS: ${MCP_PROXY_URLS:-}
       MCP_PROXY_ROTATION: ${MCP_PROXY_ROTATION:-round-robin}
+      # FastMCP HostValidationMiddleware rejects non-localhost Host headers
+      # by default. Allow all so cross-stack Docker clients (e.g. Hermes on
+      # athena_default) can reach mcp-server via DNS name.
+      FASTMCP_HTTP_ALLOWED_HOSTS: '["*"]'
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 15s
